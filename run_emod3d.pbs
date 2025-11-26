@@ -1,0 +1,128 @@
+#!/bin/bash
+#PBS -j oe
+# Note: PBS -l select/walltime/queue are overridden by qsub arguments
+ulimit -s unlimited
+set -u  # Warn on unset variables
+
+echo "========================================================"
+echo "PBS Job ID: $PBS_JOBID"
+echo "Running on host: $(hostname)"
+echo "========================================================"
+
+# --- Modules & Environment ---
+# Adjust these based on Cascade's specific module names
+echo "Loading Environment..."
+# source /etc/profile.d/modules.sh  # Uncomment if modules aren't auto-loaded
+spack load intel-oneapi-mpi
+# module load python/3.x          # Add python loader if needed
+
+cd "$PBS_O_WORKDIR" || exit 1
+
+# --- INSERT THIS BLOCK ---
+# Create a live log file using the Job ID (stripping the server name suffix)
+JOB_ID_SHORT=${PBS_JOBID%%.*}
+LOG_FILE="$PBS_O_WORKDIR/${JOBNAME}.${JOB_ID_SHORT}.log"
+
+echo "Redirecting output to live log: $LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
+# -------------------------
+
+REL_DIR="$PWD"
+FAULT_DIR=$(dirname "$REL_DIR")
+BASE_DIR=$(dirname "$(dirname "$FAULT_DIR")")
+
+echo "REL_DIR=$REL_DIR"
+echo "BASE_DIR=$BASE_DIR"
+
+# --- Variable Defaults (In case of manual submission) ---
+MAXMEM=${MAXMEM:-2500}
+EMOD3D_BIN=${EMOD3D_BIN:-"/uoc/project/uoc40001/EMOD3D/tools/emod3d-mpi_v3.0.13"}
+CREATE_E3D_SH=${CREATE_E3D_SH:-"/uoc/project/uoc40001/scratch/baes/scripts/create_e3d.sh"}
+FIX_OLD_PATH_SH=${FIX_OLD_PATH_SH:-"/uoc/project/uoc40001/scratch/baes/scripts/fix_old_nesi_path.sh"}
+
+# --- Resources ---
+PBS_NODES=0
+if [[ -f "${PBS_NODEFILE:-}" ]]; then
+  PBS_NODES=$(uniq "$PBS_NODEFILE" | wc -l)
+fi
+PBS_RANKS=$(wc -l < "$PBS_NODEFILE") 
+WCT=$(qstat -f "${PBS_JOBID}" 2>/dev/null | awk -F' = ' '/Resource_List.walltime/ {print $2; exit}' || echo "Unknown")
+
+echo "Nodes: $PBS_NODES  Total MPI ranks: $PBS_RANKS"
+echo "Using MAXMEM: $MAXMEM MB"
+
+# --- Fix legacy paths ---
+if [[ -n "${FIX_OLD_PATH_SH}" && -x "${FIX_OLD_PATH_SH}" ]]; then
+  echo "→ Fixing old paths"
+  "${FIX_OLD_PATH_SH}" "$FAULT_DIR" 2>/dev/null || true
+fi
+
+mkdir -p "$BASE_DIR/mgmt_db_queue"
+SUCCESS_CODE=0
+
+mkdir -p "$REL_DIR/LF"
+
+ 
+# --- UPDATED CALL FOR YAML-BASED SCRIPT ---
+OUTPUT_PAR="$REL_DIR/LF/e3d.par"
+
+# --- Ensure e3d.par exists ---
+if [[ ! -f "$OUTPUT_PAR" ]]; then
+  echo "e3d.par not found, generating via create_e3d.sh..."
+  
+  # Use the passed environment variable, or error out if missing
+  if [[ -z "${EMOD3D_DEFAULTS:-}" ]]; then
+      echo "Error: EMOD3D_DEFAULTS environment variable not set."
+      exit 1
+  fi
+ 
+  if [[ -x "$CREATE_E3D_SH" ]]; then
+      # The new script only needs the Sim Dir ($REL_DIR) and Output Path ($OUTPUT_PAR)
+      "${CREATE_E3D_SH}" "$REL_DIR" "$OUTPUT_PAR" "$EMOD3D_DEFAULTS"
+  else
+      echo "Error: Create script $CREATE_E3D_SH not found/executable."
+      exit 1
+  fi
+fi
+
+# --- Update e3d.par with Calculated MAXMEM ---
+sed -i "s/^maxmem=.*/maxmem=$MAXMEM/" "$REL_DIR/LF/e3d.par"
+echo "Updated e3d.par maxmem: $MAXMEM MB"
+
+# --- Restart Logic ---
+NT=$(awk -F= '/^nt=/ {print $2}' "$REL_DIR/LF/e3d.par" || echo 0)
+if [[ -d "$REL_DIR/LF/Restart" ]] && [[ $(ls -1 "$REL_DIR/LF/Restart" | wc -l) -ne 0 ]]; then
+  echo "Checkpoint found → resume"
+  sed -i 's/read_restart=.*/read_restart="1"/' "$REL_DIR/LF/e3d.par"
+else
+  # Calculate restart increment (approx 20% of run or min 50 steps)
+  RESTART_ITINC=$(( (NT / 5 + 50) / 100 * 100 ))
+  sed -i "s/restart_itinc=.*/restart_itinc=$RESTART_ITINC/" "$REL_DIR/LF/e3d.par"
+  echo "New run → restart_itinc = $RESTART_ITINC"
+fi
+
+# --- Execution ---
+runtime_fmt="%Y-%m-%d_%H:%M:%S"
+start_time=$(date +$runtime_fmt)
+start_epoch=$(date +%s)
+
+echo "Starting MPI Run at $start_time"
+mpirun -np "$PBS_RANKS" "$EMOD3D_BIN" -args "par=$REL_DIR/LF/e3d.par"
+EXIT_CODE=$?
+
+end_time=$(date +$runtime_fmt)
+end_epoch=$(date +%s)
+runtime_seconds=$((end_epoch - start_epoch))
+
+printf "Total runtime: %02d:%02d:%02d\n" $((runtime_seconds/3600)) $((runtime_seconds%3600/60)) $((runtime_seconds%60))
+
+# Link output for verification
+ln -sf "$REL_DIR/LF/e3d.par" "$REL_DIR/LF/OutBin/e3d.par" || true
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "EMOD3D finished successfully."
+    # Add verification/mgmt_db hooks here if Python is available on Cascade
+else
+    echo "EMOD3D failed with exit code $EXIT_CODE"
+    exit $EXIT_CODE
+fi

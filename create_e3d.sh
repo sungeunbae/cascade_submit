@@ -1,119 +1,81 @@
 #!/usr/bin/env bash
-# Auto-generate e3d.par from YAMLs.
-# Usage: create_e3d_from_yaml.sh <sim_dir> <output_e3d.par>
+# create_e3d.sh
+# Usage: create_e3d.sh <sim_dir> <output_e3d.par> <defaults_yaml>
+
 set -euo pipefail
 
-[[ $# -eq 2 ]] || { echo "Usage: $0 <sim_dir> <output_e3d.par>"; exit 1; }
+[[ $# -eq 3 ]] || { echo "Usage: $0 <sim_dir> <output_e3d.par> <defaults_yaml>"; exit 1; }
 SIM_DIR=$(realpath "$1")
-OUT_PAR="$2"  # can be relative; we will mkdir for it
-OUT_PAR_DIR=$(dirname "$OUT_PAR")
-mkdir -p "$OUT_PAR_DIR"
+OUT_PAR="$2"
+DEFAULTS_YAML="$3"
 
-# ---------- helpers ----------
-have(){ command -v "$1" >/dev/null 2>&1; }
-yaml_get_simple(){  # yaml_get_simple KEY FILE  (flat: key: value)
-  awk -v k="$1" '
-    $0 ~ "^[[:space:]]*#"{next}
-    match($0, /^[[:space:]]*([A-Za-z0-9_\.]+)[[:space:]]*:[[:space:]]*(.*)$/, m){
-      key=m[1]; val=m[2];
-      gsub(/[[:space:]]+$/,"",val)
-      if (key==k){ print val; exit }
-    }' "$2"
-}
+[[ -f "$DEFAULTS_YAML" ]] || { echo "Error: Defaults file $DEFAULTS_YAML not found"; exit 1; }
 
+mkdir -p "$(dirname "$OUT_PAR")"
+
+# --- Helper: YAML Parser ---
 yaml_get(){
-  local key="$1" file="$2"
-  local out=""
-  if have yq; then
-    # try both new and old yq syntaxes
-    out=$(yq --no-jq-eval -r "$key" "$file" 2>/dev/null || yq r "$file" "$key" 2>/dev/null || true)
-  fi
-  # fallback to simple grep if yq produced nothing or null
-  if [[ -z "$out" || "$out" == "null" ]]; then
-    out=$(grep -E "^[[:space:]]*${key##*.}:" "$file" | head -1 | sed 's/^[^:]*:[[:space:]]*//')
-  fi
-  echo "$out"
+  grep -E "^[[:space:]]*${1##*.}:" "$2" | head -1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"' | tr -d "'"
 }
-
 die(){ echo "Error: $*" >&2; exit 1; }
 
-# ---------- locate YAMLs ----------
+# --- 1. Locate Params Files ---
 SIM_YAML="$SIM_DIR/sim_params.yaml"
 [[ -f "$SIM_YAML" ]] || die "Missing $SIM_YAML"
 
-# fault_params.yaml path from sim_params.yaml if present; else guess in parent
-FAULT_YAML=$(yaml_get '.fault_yaml_path' "$SIM_YAML" 2>/dev/null || true)
-if [[ -z "${FAULT_YAML:-}" || "$FAULT_YAML" == "null" ]]; then
-  # typical layout: SIM_DIR/../fault_params.yaml
-  CANDIDATE="$(dirname "$SIM_DIR")/fault_params.yaml"
-  [[ -f "$CANDIDATE" ]] || die "Missing fault_params.yaml (looked at $CANDIDATE); add fault_yaml_path in sim_params.yaml or place the file in the parent dir."
-  FAULT_YAML="$CANDIDATE"
+FAULT_YAML=$(yaml_get 'fault_yaml_path' "$SIM_YAML")
+[[ -z "$FAULT_YAML" ]] && FAULT_YAML="$(dirname "$SIM_DIR")/fault_params.yaml"
+
+ROOT_YAML=$(yaml_get 'root_yaml_path' "$FAULT_YAML")
+if [[ -z "$ROOT_YAML" ]]; then
+   CUR="$SIM_DIR"
+   while [[ "$CUR" != "/" ]]; do
+     if [[ -f "$CUR/../root_params.yaml" ]]; then ROOT_YAML="$CUR/../root_params.yaml"; break; fi
+     CUR="$(dirname "$CUR")"
+   done
 fi
 
-# root_params.yaml: prefer fault_yaml_path->root_yaml_path, else walk up for Runs/root_params.yaml
-ROOT_YAML=$(yaml_get '.root_yaml_path' "$FAULT_YAML" 2>/dev/null || true)
-if [[ -z "${ROOT_YAML:-}" || "$ROOT_YAML" == "null" ]]; then
-  # ascend until filesystem root; pick first Runs/root_params.yaml
-  CUR="$SIM_DIR"
-  FOUND=""
-  while :; do
-    CAND="$CUR/../root_params.yaml"; [[ -f "$CAND" ]] && { FOUND="$CAND"; break; }
-    CAND="$CUR/../../root_params.yaml"; [[ -f "$CAND" ]] && { FOUND="$CAND"; break; }
-    CAND="$CUR/../Runs/root_params.yaml"; [[ -f "$CAND" ]] && { FOUND="$CAND"; break; }
-    CAND="$CUR/../../Runs/root_params.yaml"; [[ -f "$CAND" ]] && { FOUND="$CAND"; break; }
-    [[ "$CUR" == "/" ]] && break
-    CUR="$(dirname "$CUR")"
-  done
-  [[ -n "$FOUND" ]] || die "Missing root_params.yaml (tried common ancestors incl. Runs/root_params.yaml)."
-  ROOT_YAML="$FOUND"
+VM_YAML=$(yaml_get 'vm_params' "$SIM_YAML")
+if [[ -z "$VM_YAML" ]]; then 
+    VDIR=$(yaml_get 'vel_mod_dir' "$FAULT_YAML")
+    VM_YAML="$VDIR/vm_params.yaml"
 fi
 
-# vm_params.yaml: try sim_params.yaml.vm_params, else fault_params.vel_mod_dir/vm_params.yaml
-VM_YAML=$(yaml_get '.vm_params' "$SIM_YAML" 2>/dev/null || true)
-if [[ -z "${VM_YAML:-}" || "$VM_YAML" == "null" || ! -f "$VM_YAML" ]]; then
-  VDIR=$(yaml_get '.vel_mod_dir' "$FAULT_YAML" 2>/dev/null || true)
-  # Fallback: manual grep if yq returned empty or null
-  if [[ -z "${VDIR:-}" || "$VDIR" == "null" ]]; then
-    VDIR=$(grep -E '^[[:space:]]*vel_mod_dir:' "$FAULT_YAML" | head -1 | sed 's/^[^:]*:[[:space:]]*//')
-  fi
-  [[ -z "${VDIR:-}" || "$VDIR" == "null" ]] && die "Cannot locate vel_mod_dir in $FAULT_YAML"
-  VM_YAML="$VDIR/vm_params.yaml"
-fi
-[[ -f "$VM_YAML" ]] || die "Missing vm_params.yaml at $VM_YAML"
+# --- 2. Extract Variables ---
+NX=$(yaml_get 'nx' "$VM_YAML")
+NY=$(yaml_get 'ny' "$VM_YAML")
+NZ=$(yaml_get 'nz' "$VM_YAML")
+H=$(yaml_get 'hh' "$VM_YAML")
+SIM_DUR=$(yaml_get 'sim_duration' "$VM_YAML")
+MODEL_LON=$(yaml_get 'MODEL_LON' "$VM_YAML")
+MODEL_LAT=$(yaml_get 'MODEL_LAT' "$VM_YAML")
+MODEL_ROT=$(yaml_get 'MODEL_ROT' "$VM_YAML")
+GRIDFILE=$(yaml_get 'GRIDFILE' "$VM_YAML")
+MODEL_PARAMS=$(yaml_get 'MODEL_PARAMS' "$VM_YAML")
 
-# ---------- read values ----------
-# From VM
-NX=$(yaml_get '.nx' "$VM_YAML"); NY=$(yaml_get '.ny' "$VM_YAML"); NZ=$(yaml_get '.nz' "$VM_YAML")
-H=$(yaml_get '.hh' "$VM_YAML")
-SIM_DURATION=$(yaml_get '.sim_duration' "$VM_YAML")
-MODELLON=$(yaml_get '.MODEL_LON' "$VM_YAML"); MODELLAT=$(yaml_get '.MODEL_LAT' "$VM_YAML"); MODELROT=$(yaml_get '.MODEL_ROT' "$VM_YAML")
-GRIDFILE=$(yaml_get '.GRIDFILE' "$VM_YAML"); MODEL_PARAMS=$(yaml_get '.MODEL_PARAMS' "$VM_YAML")
+DT=$(yaml_get 'dt' "$ROOT_YAML"); DT=${DT:-0.005}
+FLO=$(yaml_get 'flo' "$ROOT_YAML"); FLO=${FLO:-1.0}
+STAT_FILE=$(yaml_get 'stat_file' "$ROOT_YAML")
+EMOD3D_VER=$(yaml_get 'emod3d_version' "$ROOT_YAML"); EMOD3D_VER=${EMOD3D_VER:-"3.0.8"}
 
-# From root
-DT=$(yaml_get '.dt' "$ROOT_YAML"); [[ "$DT" == "null" || -z "$DT" ]] && DT=0.005
-FLO=$(yaml_get '.flo' "$ROOT_YAML"); [[ "$FLO" == "null" || -z "$FLO" ]] && FLO=1.0
-STAT_FILE=$(yaml_get '.stat_file' "$ROOT_YAML")
+RUN_NAME=$(yaml_get 'run_name' "$SIM_YAML")
+SRF_FILE=$(yaml_get 'srf_file' "$SIM_YAML")
+STAT_COORDS=$(yaml_get 'stat_coords' "$FAULT_YAML")
+VMOD_DIR=$(yaml_get 'vel_mod_dir' "$FAULT_YAML")
 
-# From sim
-RUN_NAME=$(yaml_get '.run_name' "$SIM_YAML")
-SRF_FILE=$(yaml_get '.srf_file' "$SIM_YAML")
+# --- 3. Calculations (Python Logic Replication) ---
+# Time shift extension logic
+read NT TS_TOTAL <<< $(awk -v dur="$SIM_DUR" -v flo="$FLO" -v dt="$DT" '
+BEGIN {
+    ext = 3.0 / flo
+    total_dur = dur + ext
+    nt = int((total_dur / dt) + 0.5)
+    ts_total = int(total_dur / (dt * 20)) # dtts=20
+    print nt, ts_total
+}')
+DUMP_ITINC=$NT
 
-# From fault
-STAT_COORDS=$(yaml_get '.stat_coords' "$FAULT_YAML")
-VMOD_DIR=$(yaml_get '.vel_mod_dir' "$FAULT_YAML")
-
-[[ -n "$RUN_NAME" && "$RUN_NAME" != "null" ]] || die "run_name missing in $SIM_YAML"
-[[ -f "$SRF_FILE" ]] || die "srf_file not found: $SRF_FILE"
-[[ -f "$STAT_COORDS" ]] || die "stat_coords not found: $STAT_COORDS"
-[[ -d "$VMOD_DIR" ]] || die "vel_mod_dir not found: $VMOD_DIR"
-
-# EMOD3D version
-EMOD3D_VER=$(yaml_get '.emod3d.emod3d_version' "$ROOT_YAML" 2>/dev/null || true)
-[[ -z "${EMOD3D_VER:-}" || "$EMOD3D_VER" == "null" ]] && EMOD3D_VER="3.0.8"
-VERSION="${EMOD3D_VER}-mpi"
-EMOD3D_BIN="/uoc/project/uoc40001/EMOD3D/tools/emod3d-mpi_v${EMOD3D_VER}"
-
-# ---------- output dirs ----------
+# --- 4. Prepare Paths ---
 LF_DIR="$SIM_DIR/LF"
 SEIS_DIR="$LF_DIR/SeismoBin"
 RESTART_DIR="$LF_DIR/Restart"
@@ -121,36 +83,32 @@ LOG_DIR="$LF_DIR/Rlog"
 TS_OUT_DIR="$LF_DIR/TSlice/TSFiles"
 MAIN_DUMP_DIR="$LF_DIR/OutBin"
 SLIPOUT="$LF_DIR/SlipOut/slipout-k2"
+TS_FILE="$MAIN_DUMP_DIR/${RUN_NAME}_xyts.e3d"
+EMOD3D_BIN="/uoc/project/uoc40001/EMOD3D/tools/emod3d-mpi_v${EMOD3D_VER}"
+
 mkdir -p "$SEIS_DIR" "$RESTART_DIR" "$LOG_DIR" "$TS_OUT_DIR" "$MAIN_DUMP_DIR" "$(dirname "$SLIPOUT")"
 
-TS_FILE="$MAIN_DUMP_DIR/${RUN_NAME}_xyts.e3d"
+# --- 5. Generate Output ---
 
-# ---------- derived values ----------
-# version-based timeshift: <=3.0.4 → 1/flo ; >3.0.4 → 3/flo
-ts_mult=1
-IFS=. read -r a b c <<<"${EMOD3D_VER//[^0-9.]/}"
-if (( a>3 || (a==3 && (b>0 || (b==0 && c>4))) )); then ts_mult=3; fi
+# A. Parse Defaults YAML and write to output
+echo "# --- Defaults from emod3d_defaults.yaml ---" > "$OUT_PAR"
+awk -F: '/^[a-zA-Z0-9_]+:/ {
+    key=$1; $1=""; val=$0;
+    gsub(/^[ \t]+|[ \t]+$/, "", key);
+    gsub(/^[ \t]+|[ \t]+$/, "", val);
+    # Add quotes if value contains chars and isn not strictly numeric
+    if (val !~ /^[0-9.-]+$/) val = "\"" val "\""
+    printf "%s=%s\n", key, val
+}' "$DEFAULTS_YAML" >> "$OUT_PAR"
 
-timeshift=$(awk -v flo="$FLO" -v ts="$ts_mult" 'BEGIN{print ts/flo}')
-ext_dur=$(awk -v dur="$SIM_DURATION" -v t="$timeshift" 'BEGIN{print dur+t}')
-NT=$(awk -v d="$ext_dur" -v dt="$DT" 'BEGIN{printf "%.0f", d/dt}')
-DUMP_ITINC="$NT"
-DTTS=20
-TS_TOTAL=$(awk -v d="$ext_dur" -v dt="$DT" -v dtts="$DTTS" 'BEGIN{printf "%.0f", d/(dt*dtts)}')
+# B. Append Run-Specific Overrides
+cat >> "$OUT_PAR" <<EOF
 
-# ---------- write e3d.par ----------
-cat > "$OUT_PAR" <<EOF
-all_in_one=1
-enable_output_dump=1
-enable_restart=1
-freesurf=1
-geoproj=1
-order=4
-swap_bytes=0
-vmodel_swapb=0
-lonlat_out=1
-report=100
+# --- Run-Specific Overrides ---
+version="${EMOD3D_VER}-mpi"
+name="${RUN_NAME}"
 n_proc=512
+
 nx=$NX
 ny=$NY
 nz=$NZ
@@ -158,33 +116,34 @@ h=$H
 dt=$DT
 nt=$NT
 flo=$FLO
-dtts=$DTTS
+
 dump_itinc=$DUMP_ITINC
 ts_total=$TS_TOTAL
-version="$VERSION"
-name="$RUN_NAME"
-restartname="$RUN_NAME"
-maxmem=2500
-faultfile="$SRF_FILE"
-vmoddir="$VMOD_DIR"
-modellon=$MODELLON
-modellat=$MODELLAT
-modelrot=$MODELROT
-main_dump_dir="$MAIN_DUMP_DIR"
-restartdir="$RESTART_DIR"
-seisdir="$SEIS_DIR"
-logdir="$LOG_DIR"
-slipout="$SLIPOUT"
-ts_out_dir="$TS_OUT_DIR"
-ts_file="$TS_FILE"
-seiscords="$STAT_COORDS"
-grid_file="$GRIDFILE"
-model_params="$MODEL_PARAMS"
-stat_file="$STAT_FILE"
-sim_dir="$SIM_DIR"
-wcc_prog_dir="$EMOD3D_BIN"
-vel_mod_params_dir="$VMOD_DIR"
+
+faultfile="${SRF_FILE}"
+vmoddir="${VMOD_DIR}"
+
+modellon=$MODEL_LON
+modellat=$MODEL_LAT
+modelrot=$MODEL_ROT
+
+main_dump_dir="${MAIN_DUMP_DIR}"
+seiscords="${STAT_COORDS}"
+user_scratch="${SIM_DIR}/.."
+seisdir="${SEIS_DIR}"
+ts_file="${TS_FILE}"
+ts_out_dir="${TS_OUT_DIR}"
+restartdir="${RESTART_DIR}"
+restartname="${RUN_NAME}"
+logdir="${LOG_DIR}"
+slipout="${SLIPOUT}"
+
+wcc_prog_dir="${EMOD3D_BIN}"
+vel_mod_params_dir="${VMOD_DIR}"
+sim_dir="${SIM_DIR}"
+stat_file="${STAT_FILE}"
+grid_file="${GRIDFILE}"
+model_params="${MODEL_PARAMS}"
 EOF
 
-echo "✅ Wrote $OUT_PAR"
-
+echo "✅ Generated $OUT_PAR using defaults from $DEFAULTS_YAML"
