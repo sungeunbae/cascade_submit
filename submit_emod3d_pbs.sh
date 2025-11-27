@@ -40,11 +40,15 @@ choose_queue() {
 
 # --- Main Script ---
 
-if [ "$#" -ne 6 ]; then
-  echo "Usage: $0 <job_directory> <nodes> <ntasks_per_node> <mem> <time> <defaults_yaml>"
-  echo "Example: $0 \$(pwd) 6 84 735gb 24:00:00 /path/to/emod3d_defaults.yaml"
+if [ "$#" -lt 6 ] || [ "$#" -gt 7 ]; then
+  echo "Usage: $0 <job_dir> <nodes> <ntasks> <mem> <time> <defaults_yaml> [enable_restart]"
+  echo "Example: $0 ... 72:00:00 defaults.yaml no"
   exit 1
 fi
+
+# ... (Existing variable assignments) ...
+DEFAULTS_ARG=$6
+ENABLE_RESTART=${7:-"yes"}  # Default to "yes" if not specified
 
 JOB_DIR=$1
 NODES=$2
@@ -92,16 +96,15 @@ echo "════════════════════════�
 # --- Submit ---
 SELECT_STR="select=${NODES}:ncpus=${NTASKS_PER_NODE}:mpiprocs=${NTASKS_PER_NODE}:ompthreads=1:mem=${MEM_PER_NODE}"
 
+# Add ENABLE_RESTART to the -v list
 QSUB_CMD=( qsub
   -q "$QUEUE"
   -N "lf.${JOBNAME}"
   -l "$SELECT_STR"
   -l "walltime=${WALLTIME}"
-  # Pass EMOD3D_DEFAULTS to the job environment
-  -v MAXMEM="$MAXMEM",JOBNAME="$JOBNAME",EMOD3D_BIN="$EMOD3D_BIN",CREATE_E3D_SH="$CREATE_E3D_SH",FIX_OLD_PATH_SH="$FIX_OLD_PATH_SH",EMOD3D_DEFAULTS="$EMOD3D_DEFAULTS"
+  -v MAXMEM="$MAXMEM",JOBNAME="$JOBNAME",EMOD3D_BIN="$EMOD3D_BIN",CREATE_E3D_SH="$CREATE_E3D_SH",FIX_OLD_PATH_SH="$FIX_OLD_PATH_SH",EMOD3D_DEFAULTS="$EMOD3D_DEFAULTS",ENABLE_RESTART="$ENABLE_RESTART"
   "$PBS_SCRIPT"
 )
-
 echo "Executing: ${QSUB_CMD[*]}"
 "${QSUB_CMD[@]}"
 

@@ -89,16 +89,36 @@ fi
 sed -i "s/^maxmem=.*/maxmem=$MAXMEM/" "$REL_DIR/LF/e3d.par"
 echo "Updated e3d.par maxmem: $MAXMEM MB"
 
+
 # --- Restart Logic ---
-NT=$(awk -F= '/^nt=/ {print $2}' "$REL_DIR/LF/e3d.par" || echo 0)
-if [[ -d "$REL_DIR/LF/Restart" ]] && [[ $(ls -1 "$REL_DIR/LF/Restart" | wc -l) -ne 0 ]]; then
-  echo "Checkpoint found → resume"
-  sed -i 's/read_restart=.*/read_restart="1"/' "$REL_DIR/LF/e3d.par"
+ENABLE_RESTART=${ENABLE_RESTART:-"yes"} # Default to yes if variable missing
+
+if [[ "${ENABLE_RESTART,,}" == "no" || "${ENABLE_RESTART,,}" == "false" || "${ENABLE_RESTART}" == "0" ]]; then
+    echo "Info: Restart explicitly DISABLED by user."
+    
+    # 1. Disable in parameter file
+    sed -i 's/^enable_restart=.*/enable_restart=0/' "$REL_DIR/LF/e3d.par"
+    sed -i 's/^read_restart=.*/read_restart=0/' "$REL_DIR/LF/e3d.par"
+    
+    # 2. Safety: Rename existing restart directory to avoid confusion
+    if [[ -d "$REL_DIR/LF/Restart" ]]; then
+        echo "Cleaning up old Restart directory..."
+        rm -rf "$REL_DIR/LF/Restart"
+        mkdir -p "$REL_DIR/LF/Restart" # Create empty dir just in case code expects it
+    fi
+
 else
-  # Calculate restart increment (approx 20% of run or min 50 steps)
-  RESTART_ITINC=$(( (NT / 5 + 50) / 100 * 100 ))
-  sed -i "s/restart_itinc=.*/restart_itinc=$RESTART_ITINC/" "$REL_DIR/LF/e3d.par"
-  echo "New run → restart_itinc = $RESTART_ITINC"
+    # --- Standard Restart Logic (Preserve your existing logic here) ---
+    NT=$(awk -F= '/^nt=/ {print $2}' "$REL_DIR/LF/e3d.par" || echo 0)
+    if [[ -d "$REL_DIR/LF/Restart" ]] && [[ $(ls -1 "$REL_DIR/LF/Restart" | wc -l) -gt 0 ]]; then
+      echo "Checkpoint found -> resume"
+      sed -i 's/read_restart=.*/read_restart="1"/' "$REL_DIR/LF/e3d.par"
+    else
+      # Calculate restart increment (approx 20% of run or min 50 steps)
+      RESTART_ITINC=$(( (NT / 5 + 50) / 100 * 100 ))
+      sed -i "s/restart_itinc=.*/restart_itinc=$RESTART_ITINC/" "$REL_DIR/LF/e3d.par"
+      echo "New run -> restart_itinc = $RESTART_ITINC"
+    fi
 fi
 
 # --- Execution ---
