@@ -7,7 +7,7 @@ if [ "$#" -lt 1 ]; then
 fi
 
 EVENT=$1
-BATCHES="20250502_01_msr_w_c 20250502_01_msr_w_sdvrqa_basr 20250502_01_msr_w_sdvr 20250502_01_msr_w_sdvrqa_basr_POINTSOURCE"
+BATCHES="20250502_01_msr_w_c 20250502_01_msr_w_sdvr 20250502_01_msr_w_sdvrqa_basr 20250502_01_msr_w_sdvrqa_basr_POINTSOURCE"
 
 echo "=========================================================="
 echo "Monitoring Event: $EVENT"
@@ -23,10 +23,10 @@ for B in $BATCHES; do
   
   echo ""
   echo "----------------------------------------------------------"
-  echo "Batch: $B"
+  echo "Batch: $B: $(pwd)/$B/Runs/$EVENT/$EVENT/"
 
   if [[ -f "$RLOG_FILE" ]]; then
-      echo "Log:   .../LF/Rlog/${EVENT}-00000.rlog"
+      echo "Log:   LF/Rlog/${EVENT}-00000.rlog"
       echo -e "\033[0;36m--- Last 10 lines ---\033[0m"
       tail -n 10 "$RLOG_FILE"
       echo -e "\033[0;36m---------------------\033[0m"

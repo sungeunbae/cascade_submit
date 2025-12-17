@@ -18,7 +18,7 @@ TASKS=${3:-84}
 MEM=${4:-735gb}
 TIME=${5:-72:00:00}
 
-BATCHES="20250502_01_msr_w_c 20250502_01_msr_w_sdvrqa_basr 20250502_01_msr_w_sdvr 20250502_01_msr_w_sdvrqa_basr_POINTSOURCE"
+BATCHES="20250502_01_msr_w_c 20250502_01_msr_w_sdvr 20250502_01_msr_w_sdvrqa_basr 20250502_01_msr_w_sdvrqa_basr_POINTSOURCE"
 
 echo "=========================================================="
 echo "Preparing batch submission for Event: $EVENT"

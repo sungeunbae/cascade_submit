@@ -48,7 +48,7 @@ fi
 
 # ... (Existing variable assignments) ...
 DEFAULTS_ARG=$6
-ENABLE_RESTART=${7:-"yes"}  # Default to "yes" if not specified
+ENABLE_RESTART=${7:-"no"}  # Default to "no" if not specified
 
 JOB_DIR=$1
 NODES=$2
@@ -91,6 +91,7 @@ echo "  Total Cores:     $((NODES * NTASKS_PER_NODE))"
 echo "  Queue:           $QUEUE"
 echo "  MAXMEM:          $MAXMEM_MB MB/core"
 echo "  Defaults File:   $EMOD3D_DEFAULTS"
+echo "  Enable restart:  $ENABLE_RESTART"
 echo "═══════════════════════════════════════════════════════════"
 
 # --- Submit ---
