@@ -59,9 +59,13 @@ BASE_DIR=$(dirname "$(dirname "$FAULT_DIR")")
 
 # Defaults
 MAXMEM=${MAXMEM:-2500}
-EMOD3D_BIN=${EMOD3D_BIN:-"/uoc/project/uoc40001/EMOD3D/tools/emod3d-mpi_v3.0.8"}
+#EMOD3D_BIN=${EMOD3D_BIN:-"/uoc/project/uoc40001/EMOD3D/tools/emod3d-mpi_v3.0.8"}
+EMOD3D_BIN=${EMOD3D_BIN:-"/uoc/project/uoc40001/scratch/baes/EMOD3D/tools/emod3d-mpi_v3.0.8"}
+echo $EMOD3D_BIN
+
 CREATE_E3D_SH=${CREATE_E3D_SH:-"/uoc/project/uoc40001/scratch/baes/scripts/create_e3d.sh"}
 FIX_OLD_PATH_SH=${FIX_OLD_PATH_SH:-"/uoc/project/uoc40001/scratch/baes/scripts/fix_nesi_path.sh"}
+DISTRIBUTE_PY="/uoc/project/uoc40001/scratch/baes/scripts/distribute_par_file.py"
 
 # Resources info
 PBS_NODES=0
@@ -111,8 +115,10 @@ else
 fi
 
 echo "Starting MPI Run at $(date)"
+
 mpirun -np "$PBS_RANKS" "$EMOD3D_BIN" -args "par=$OUTPUT_PAR"
 EXIT_CODE=$?
+
 
 ln -sf "$REL_DIR/LF/e3d.par" "$REL_DIR/LF/OutBin/e3d.par" || true
 
