@@ -4,7 +4,7 @@
 
 # --- DEBUG SETTINGS ---
 set +u
-set -x 
+#set -x 
 
 # ========================================================
 # 1. ARRAY IDENTIFICATION
@@ -113,19 +113,38 @@ else
       sed -i "s/restart_itinc=.*/restart_itinc=$RESTART_ITINC/" "$OUTPUT_PAR"
     fi
 fi
+i
 
+START_TIMESTAMP=$(date +%s)
 echo "Starting MPI Run at $(date)"
 
 mpirun -np "$PBS_RANKS" "$EMOD3D_BIN" -args "par=$OUTPUT_PAR"
 EXIT_CODE=$?
-
+END_TIMESTAMP=$(date +%s)
 
 ln -sf "$REL_DIR/LF/e3d.par" "$REL_DIR/LF/OutBin/e3d.par" || true
 
 if [ $EXIT_CODE -eq 0 ]; then
     echo "EMOD3D finished successfully."
+    
+    # --- STATISTICS ---
+    DURATION=$((END_TIMESTAMP - START_TIMESTAMP))
+    
+    # Calculate stats using awk for floating point math
+    STATS=$(awk -v dur="$DURATION" -v ranks="$PBS_RANKS" 'BEGIN { 
+        hours = dur / 3600;
+        core_hours = hours * ranks;
+        printf "Elapsed Time: %d seconds (%.2f hours)\n  Core Hours:   %.2f", dur, hours, core_hours 
+    }')
+    
+    echo "=========================================="
+    echo "Run Statistics:"
+    echo "  $STATS"
+    echo "=========================================="
+    
 else
     echo "EMOD3D failed with exit code $EXIT_CODE"
     exit $EXIT_CODE
 fi
+
 

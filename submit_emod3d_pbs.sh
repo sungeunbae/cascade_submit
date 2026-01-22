@@ -30,7 +30,9 @@ choose_queue() {
   mem_val=$(mem_to_mb "$MEM_PER_NODE")
   IFS=: read -r hh mm ss <<<"$time"; local tsec=$((10#$hh*3600 + 10#$mm*60 + 10#$ss))
   
-  if (( mem_val > 770000 )); then
+  # CORRECTED THRESHOLD: 700GB (700000 MB)
+  # Since nodes are 750GB+, we allow standard queue up to 700GB.
+  if (( mem_val > 700000 )); then
     if (( tsec > 48*3600 )); then q_name="high_mem_longq"; else q_name="high_mem_shortq"; fi
   else
     if (( tsec > 48*3600 )); then q_name="longq"; else q_name="shortq"; fi
@@ -46,16 +48,13 @@ if [ "$#" -lt 6 ] || [ "$#" -gt 7 ]; then
   exit 1
 fi
 
-# ... (Existing variable assignments) ...
-DEFAULTS_ARG=$6
-ENABLE_RESTART=${7:-"no"}  # Default to "no" if not specified
-
 JOB_DIR=$1
 NODES=$2
 NTASKS_PER_NODE=$3
-MEM_PER_NODE=$4      
+MEM_PER_NODE=$4       
 WALLTIME=$5
 DEFAULTS_ARG=$6
+ENABLE_RESTART=${7:-"no"}  # Default to "no" if not specified
 
 # Validate and absolute-path the defaults file
 if [[ ! -f "$DEFAULTS_ARG" ]]; then
@@ -84,26 +83,24 @@ QUEUE=$(echo "$QUEUE" | tr -d '\n')
 # --- Reporting ---
 echo "═══════════════════════════════════════════════════════════"
 echo "Job Configuration (Cascade):"
-echo "  Job Name:        $JOBNAME"
-echo "  Nodes:           $NODES"
-echo "  Tasks per Node:  $NTASKS_PER_NODE"
-echo "  Total Cores:     $((NODES * NTASKS_PER_NODE))"
-echo "  Queue:           $QUEUE"
-echo "  MAXMEM:          $MAXMEM_MB MB/core"
-echo "  Defaults File:   $EMOD3D_DEFAULTS"
-echo "  Enable restart:  $ENABLE_RESTART"
+echo "  Job Name:         $JOBNAME"
+echo "  Nodes:            $NODES"
+echo "  Tasks per Node:   $NTASKS_PER_NODE"
+echo "  Total Cores:      $((NODES * NTASKS_PER_NODE))"
+echo "  Queue:            $QUEUE"
+echo "  MAXMEM:           $MAXMEM_MB MB/core"
+echo "  Defaults File:    $EMOD3D_DEFAULTS"
+echo "  Enable restart:   $ENABLE_RESTART"
 echo "═══════════════════════════════════════════════════════════"
 
 # --- Submit ---
 SELECT_STR="select=${NODES}:ncpus=${NTASKS_PER_NODE}:mpiprocs=${NTASKS_PER_NODE}:ompthreads=1:mem=${MEM_PER_NODE}"
 
-# Add ENABLE_RESTART to the -v list
 QSUB_CMD=( qsub
   -q "$QUEUE"
   -N "lf.${JOBNAME}"
   -l "$SELECT_STR"
   -l "walltime=${WALLTIME}"
-  -l "nodepool=esi_researchp"
   -v MAXMEM="$MAXMEM",JOBNAME="$JOBNAME",EMOD3D_BIN="$EMOD3D_BIN",CREATE_E3D_SH="$CREATE_E3D_SH",FIX_OLD_PATH_SH="$FIX_OLD_PATH_SH",EMOD3D_DEFAULTS="$EMOD3D_DEFAULTS",ENABLE_RESTART="$ENABLE_RESTART"
   "$PBS_SCRIPT"
 )
