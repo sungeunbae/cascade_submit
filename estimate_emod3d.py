@@ -15,7 +15,7 @@ import subprocess
 
 # --- HARDWARE CONSTANTS ---
 PHYSICAL_CORES_PER_NODE = 192  
-MAX_NODES_CAP = 9  # Reduced to 9 to avoid metadata storm issues (previously 10/12)           
+MAX_NODES_CAP = 10
 
 # --- MEMORY CONSTANTS ---
 # Heuristic: 31 * float4 * grid_points
@@ -156,8 +156,8 @@ def estimate_resources(vm_file, root_file, max_walltime_hours=DEFAULT_MAX_WALLTI
     best_config = candidates[0]
 
     # --- FINAL REQUEST CALCULATION ---
-    # Add 10% buffer
-    req_mem_per_node = best_config['mem_per_node'] * 1.10
+    # Add 20% buffer
+    req_mem_per_node = best_config['mem_per_node'] * 1.20
     
     if best_config['queue'] == 'standard':
         # Ensure we request at least what we calculated, but don't ask for the full node (700)
@@ -172,7 +172,7 @@ def estimate_resources(vm_file, root_file, max_walltime_hours=DEFAULT_MAX_WALLTI
     total_req_gb = int(req_mem_per_node * best_config['nodes'])
 
     # Time Buffer
-    req_walltime_sec = int(best_config['time'] * 1.2 + 900)
+    req_walltime_sec = int(best_config['time'] * 1.5 + 1200)
     h, r = divmod(req_walltime_sec, 3600)
     m, s = divmod(r, 60)
     wall_str = f"{int(h):02d}:{int(m):02d}:{int(s):02d}"

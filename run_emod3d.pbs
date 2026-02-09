@@ -35,7 +35,7 @@ fi
 # ========================================================
 # 2. LOGGING SETUP (UPDATED FORMAT)
 # ========================================================
-set +x
+#set +x
 # Get ID (e.g., 2016263[1].pbsserver)
 JOB_ID_RAW=${PBS_JOBID%%.*}
 
@@ -45,7 +45,7 @@ LOG_FILE="$PWD/${JOBNAME}.${CLEAN_ID}.log"
 
 echo "Redirecting output to live log: $LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
-set -x
+#set -x
 
 # ========================================================
 # 3. ENVIRONMENT & EXECUTION

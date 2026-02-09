@@ -240,10 +240,16 @@ resolve_base_dir_for_job() {
 
     debug "Parsed: map_file='$map_file', sim_index='$sim_index', PBS_O_WORKDIR='$pbs_oworkdir'"
 
+    # If sim_index is still empty, try extracting from array_index field in qstat output
+    if [[ -z "$sim_index" ]]; then
+        sim_index=$(echo "$qstat_output" | grep "^    array_index = " | awk '{print $3}')
+        debug "Extracted array_index from qstat main output: sim_index='$sim_index'"
+    fi
+
     # Simulated array: ARRAY_MAP_FILE + PBS_ARRAY_INDEX
     if [[ -n "$map_file" && -n "$sim_index" && -f "$map_file" ]]; then
-        echo "Detected simulated array job (Index=$sim_index)"
-        echo "Using map file: $map_file"
+        echo "Detected simulated array job (Index=$sim_index)" >&2
+        echo "Using map file: $map_file" >&2
         base_dir=$(sed -n "${sim_index}p" "$map_file" | xargs)
         [[ -n "$base_dir" && "$base_dir" != */ ]] && base_dir="${base_dir}/"
         debug "Simulated array base_dir='$base_dir'"
@@ -460,4 +466,3 @@ base_dir="${base_and_map%%|*}"
 map_file_hint="${base_and_map#*|}"
 
 show_rlog "$base_dir" "$jobid" "$map_file_hint"
-
