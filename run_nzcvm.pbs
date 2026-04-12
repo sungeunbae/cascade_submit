@@ -1,0 +1,1 @@
+#PBS -N nzcvm\n#PBS -l walltime=02:00:00\n#PBS -l nodes=1:ppn=8\n#PBS -l mem=8gb\ncd $PBS_O_WORKDIR\nsource /home/baes/py313/bin/activate\n# Change VENV_PATH here\nVENV_PATH="/home/baes/py313"\n# Other lines of the script...\n#PBS -o output.txt\n#PBS -e error.txt\n./your_script.sh\n
