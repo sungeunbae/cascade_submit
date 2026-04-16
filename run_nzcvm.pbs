@@ -136,3 +136,4 @@ echo "  Stage 2 (convert):  ${STAGE2_DUR}s"
 echo "  Total: $(awk "BEGIN{printf \"%d seconds (%.2f hours)\", ${TOTAL_DUR}, ${TOTAL_DUR}/3600}")"
 echo "  Output: ${RESOLVED_OUT_DIR}"
 echo "=========================================="
+

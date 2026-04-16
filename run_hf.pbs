@@ -1,0 +1,120 @@
+#!/bin/bash
+#PBS -j oe
+#PBS -l select=1:ncpus=4:mem=84GB
+
+set -euo pipefail
+
+INDEX=""
+if [[ -n "${PBS_ARRAY_INDEX:-}" ]]; then
+    INDEX="$PBS_ARRAY_INDEX"
+elif [[ -n "${PBS_ARRAYID:-}" ]]; then
+    INDEX="$PBS_ARRAYID"
+fi
+
+if [[ -n "$INDEX" ]] && [[ -n "${ARRAY_MAP_FILE:-}" ]]; then
+    REL_DIR=$(sed -n "${INDEX}p" "$ARRAY_MAP_FILE")
+    if [[ -z "$REL_DIR" || ! -d "$REL_DIR" ]]; then
+        echo "CRITICAL ERROR: Invalid target for index $INDEX: $REL_DIR"
+        exit 1
+    fi
+    cd "$REL_DIR"
+    JOBNAME=$(basename "$REL_DIR")
+else
+    cd "${PBS_O_WORKDIR:-$PWD}"
+    REL_DIR="$PWD"
+    JOBNAME="${JOBNAME:-$(basename "$REL_DIR")}"
+fi
+
+JOB_ID_RAW=${PBS_JOBID%%.*}
+CLEAN_ID=$(echo "$JOB_ID_RAW" | sed 's/[][]/_/g')
+LOG_FILE="$PWD/${JOBNAME}.${CLEAN_ID}.log"
+echo "Redirecting output to live log: $LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+START_TIMESTAMP=$(date +%s)
+echo "HF run started at: $(date)"
+echo "REL_DIR: $REL_DIR"
+echo "JOBNAME: $JOBNAME"
+echo "PBS_JOBID: ${PBS_JOBID:-N/A}"
+echo "PBS_ARRAY_INDEX: ${PBS_ARRAY_INDEX:-N/A}"
+
+GMSIM_ENV="${GMSIM_ENV:-/uoc/project/uoc40001/Environments/mrd87_4}"
+HF_BIN_DIR="${HF_BIN_DIR:-/uoc/project/uoc40001/scratch/baes/tools}"
+SCRIPTS_DIR="${SCRIPTS_DIR:-/uoc/project/uoc40001/scratch/baes/scripts}"
+FIX_PATH_SCRIPT="${SCRIPTS_DIR}/fix_nesi_path.sh"
+HF_COMMAND_SCRIPT="${SCRIPTS_DIR}/run_hf_command.py"
+
+echo "GMSIM_ENV: $GMSIM_ENV"
+echo "HF_BIN_DIR: $HF_BIN_DIR"
+echo "SCRIPTS_DIR: $SCRIPTS_DIR"
+
+if [[ ! -f "${GMSIM_ENV}/py311/bin/activate" ]]; then
+    echo "Error: gmsim activation script not found: ${GMSIM_ENV}/py311/bin/activate"
+    exit 1
+fi
+source "${GMSIM_ENV}/py311/bin/activate"
+export gmsim="$GMSIM_ENV"
+
+FAULT_DIR=$(dirname "$REL_DIR")
+if [[ -x "$FIX_PATH_SCRIPT" ]]; then
+    "$FIX_PATH_SCRIPT" "$FAULT_DIR" 2>/dev/null || true
+fi
+
+mkdir -p "$REL_DIR/HF/Acc"
+HF_BIN_FILE="$REL_DIR/HF/Acc/HF.bin"
+if [[ -s "$HF_BIN_FILE" ]]; then
+    echo "HF already completed for $REL_DIR (HF.bin exists and is non-empty). Skipping."
+    exit 0
+fi
+
+if [[ ! -f "$HF_COMMAND_SCRIPT" ]]; then
+    echo "Error: run_hf_command.py not found: $HF_COMMAND_SCRIPT"
+    exit 1
+fi
+
+HF_CMD_OUTPUT=$(python "$HF_COMMAND_SCRIPT" "$REL_DIR" --bin-dir "$HF_BIN_DIR" 2>&1)
+HF_CMD=$(echo "$HF_CMD_OUTPUT" | tail -n 1)
+
+if [[ -z "$HF_CMD" ]]; then
+    echo "Error: HF command generation failed."
+    echo "$HF_CMD_OUTPUT"
+    exit 1
+fi
+
+echo "Generated HF command:"
+echo "$HF_CMD"
+
+eval "$HF_CMD"
+EXIT_CODE=$?
+
+if [[ $EXIT_CODE -ne 0 ]]; then
+    echo "HF command failed with exit code $EXIT_CODE"
+    exit "$EXIT_CODE"
+fi
+
+if [[ ! -s "$HF_BIN_FILE" ]]; then
+    echo "Error: Expected output not created or empty: $HF_BIN_FILE"
+    exit 1
+fi
+
+END_TIMESTAMP=$(date +%s)
+DURATION=$((END_TIMESTAMP - START_TIMESTAMP))
+PBS_CORES=${PBS_NCPUS:-0}
+if [[ "$PBS_CORES" -eq 0 ]] && [[ -f "${PBS_NODEFILE:-}" ]]; then
+    PBS_CORES=$(wc -l < "$PBS_NODEFILE")
+fi
+if [[ "$PBS_CORES" -eq 0 ]]; then
+    PBS_CORES=4
+fi
+
+STATS=$(awk -v dur="$DURATION" -v cores="$PBS_CORES" 'BEGIN {
+    hours = dur / 3600;
+    core_hours = hours * cores;
+    printf "Elapsed Time: %d seconds (%.2f hours)\nCore Hours:   %.2f", dur, hours, core_hours
+}')
+
+echo "HF completed successfully."
+echo "=========================================="
+echo "Run Statistics:"
+echo "  $STATS"
+echo "=========================================="
