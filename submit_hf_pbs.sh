@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-DEFAULT_GMSIM_ENV="/uoc/project/uoc40001/Environments/mrd87_4"
+DEFAULT_GMSIM_ENV="/home/baes/py313"
 DEFAULT_HF_BIN_DIR="/uoc/project/uoc40001/scratch/baes/tools"
 DEFAULT_SCRIPTS_DIR="/uoc/project/uoc40001/scratch/baes/scripts"
 

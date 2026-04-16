@@ -38,7 +38,7 @@ echo "JOBNAME: $JOBNAME"
 echo "PBS_JOBID: ${PBS_JOBID:-N/A}"
 echo "PBS_ARRAY_INDEX: ${PBS_ARRAY_INDEX:-N/A}"
 
-GMSIM_ENV="${GMSIM_ENV:-/uoc/project/uoc40001/Environments/mrd87_4}"
+GMSIM_ENV="${GMSIM_ENV:-/home/baes/py313}"
 HF_BIN_DIR="${HF_BIN_DIR:-/uoc/project/uoc40001/scratch/baes/tools}"
 SCRIPTS_DIR="${SCRIPTS_DIR:-/uoc/project/uoc40001/scratch/baes/scripts}"
 FIX_PATH_SCRIPT="${SCRIPTS_DIR}/fix_nesi_path.sh"
@@ -48,12 +48,19 @@ echo "GMSIM_ENV: $GMSIM_ENV"
 echo "HF_BIN_DIR: $HF_BIN_DIR"
 echo "SCRIPTS_DIR: $SCRIPTS_DIR"
 
-if [[ ! -f "${GMSIM_ENV}/py311/bin/activate" ]]; then
-    echo "Error: gmsim activation script not found: ${GMSIM_ENV}/py311/bin/activate"
+if [[ -f "${GMSIM_ENV}/bin/activate" ]]; then
+    ACTIVATE_SCRIPT="${GMSIM_ENV}/bin/activate"
+    export gmsim="$(dirname "$GMSIM_ENV")"
+elif [[ -f "${GMSIM_ENV}/py311/bin/activate" ]]; then
+    ACTIVATE_SCRIPT="${GMSIM_ENV}/py311/bin/activate"
+    export gmsim="$GMSIM_ENV"
+else
+    echo "Error: Cannot find Python activation script under: $GMSIM_ENV"
+    echo "  Tried: ${GMSIM_ENV}/bin/activate"
+    echo "  Tried: ${GMSIM_ENV}/py311/bin/activate"
     exit 1
 fi
-source "${GMSIM_ENV}/py311/bin/activate"
-export gmsim="$GMSIM_ENV"
+source "$ACTIVATE_SCRIPT"
 
 FAULT_DIR=$(dirname "$REL_DIR")
 if [[ -x "$FIX_PATH_SCRIPT" ]]; then
