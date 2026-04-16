@@ -55,6 +55,8 @@ def parse_walltime_seconds(walltime):
     parts = walltime.split(":")
     if len(parts) != 3:
         raise ValueError(f"Invalid walltime format: {walltime}. Expected HH:MM:SS")
+    if not all(part.isdigit() for part in parts):
+        raise ValueError(f"Invalid walltime value: {walltime}. HH, MM and SS must be numeric.")
     hh, mm, ss = (int(parts[0]), int(parts[1]), int(parts[2]))
     return hh * 3600 + mm * 60 + ss
 

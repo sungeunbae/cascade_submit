@@ -110,7 +110,7 @@ fi
 STATS=$(awk -v dur="$DURATION" -v cores="$PBS_CORES" 'BEGIN {
     hours = dur / 3600;
     core_hours = hours * cores;
-    printf "Elapsed Time: %d seconds (%.2f hours)\n  Core Hours:   %.2f", dur, hours, core_hours
+    printf "Elapsed Time: %d seconds (%.2f hours)\nCore Hours:   %.2f", dur, hours, core_hours
 }')
 
 echo "HF completed successfully."
