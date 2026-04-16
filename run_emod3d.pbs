@@ -65,7 +65,6 @@ echo $EMOD3D_BIN
 
 CREATE_E3D_SH=${CREATE_E3D_SH:-"/uoc/project/uoc40001/scratch/baes/scripts/create_e3d.sh"}
 FIX_OLD_PATH_SH=${FIX_OLD_PATH_SH:-"/uoc/project/uoc40001/scratch/baes/scripts/fix_nesi_path.sh"}
-DISTRIBUTE_PY="/uoc/project/uoc40001/scratch/baes/scripts/distribute_par_file.py"
 
 # Resources info
 PBS_NODES=0
