@@ -26,7 +26,7 @@ else
 fi
 
 JOB_ID_RAW=${PBS_JOBID%%.*}
-CLEAN_ID=$(echo "$JOB_ID_RAW" | sed 's/\[/_/g; s/\]//g')
+CLEAN_ID=$(echo "$JOB_ID_RAW" | sed 's/[][]/_/g')
 LOG_FILE="$PWD/${JOBNAME}.${CLEAN_ID}.log"
 echo "Redirecting output to live log: $LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1

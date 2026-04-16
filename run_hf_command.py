@@ -159,7 +159,10 @@ def build_hf_command(rel_dir, sim_params, fault_params, root_params, vm_params, 
 
     gmsim = os.environ.get("gmsim")
     if not gmsim:
-        raise ValueError("Environment variable 'gmsim' is not set")
+        raise ValueError(
+            "Environment variable 'gmsim' is not set. "
+            "Please ensure the gmsim environment is activated."
+        )
 
     # Get HF parameters from configs
     hf_params = root_params.get("hf", {})
