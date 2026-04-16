@@ -157,13 +157,6 @@ def build_hf_command(rel_dir, sim_params, fault_params, root_params, vm_params, 
     """Build hf_sim.py command from config hierarchy."""
     rel_path = Path(rel_dir)
 
-    gmsim = os.environ.get("gmsim")
-    if not gmsim:
-        raise ValueError(
-            "Environment variable 'gmsim' is not set. "
-            "Please ensure the gmsim environment is activated."
-        )
-
     # Get HF parameters from configs
     hf_params = root_params.get("hf", {})
     sim_hf_params = sim_params.get("hf", {})
@@ -184,7 +177,9 @@ def build_hf_command(rel_dir, sim_params, fault_params, root_params, vm_params, 
         raise FileNotFoundError(f"Slip file not found: {slip_file}")
 
     # Build base command (no srun on Cascade)
-    command = f"python {gmsim}/workflow/workflow/calculation/hf_sim.py {stat_file} {out_file}"
+    scripts_dir = os.path.dirname(os.path.abspath(__file__))
+    hf_sim_script = os.path.join(scripts_dir, "hf_sim.py")
+    command = f"python {hf_sim_script} {stat_file} {out_file}"
 
     # Get REQUIRED parameters (will raise if not found)
     duration = get_duration(sim_params, hf_params, vm_params)
