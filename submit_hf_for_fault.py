@@ -16,7 +16,7 @@ import sys
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SUBMIT_BASH_SCRIPT = os.path.join(SCRIPTS_DIR, "submit_hf_pbs.sh")
 MASTER_PBS_SCRIPT = os.path.join(SCRIPTS_DIR, "run_hf.pbs")
-DEFAULT_GMSIM_ENV = "/uoc/project/uoc40001/Environments/mrd87_4"
+DEFAULT_GMSIM_ENV = "/home/baes/py313"
 DEFAULT_HF_BIN_DIR = "/uoc/project/uoc40001/scratch/baes/tools"
 
 DEFAULT_NCPUS = 4
