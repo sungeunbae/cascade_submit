@@ -6,7 +6,7 @@
 set -euo pipefail
 
 DEFAULT_GMSIM_ENV="/home/baes/py313"
-DEFAULT_HF_BIN_DIR="/uoc/project/uoc40001/scratch/baes/tools"
+DEFAULT_HF_BIN_DIR="/uoc/project/uoc40001/scratch/baes/EMOD3D/tools"
 DEFAULT_SCRIPTS_DIR="/uoc/project/uoc40001/scratch/baes/scripts"
 
 if [[ "$#" -lt 4 || "$#" -gt 5 ]]; then

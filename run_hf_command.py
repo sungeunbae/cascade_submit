@@ -14,8 +14,8 @@ from pathlib import Path
 from qcore import utils
 
 # Default binary directory (can be overridden with --bin-dir)
-BIN_DIR = "/uoc/project/uoc40001/scratch/baes/tools"
-
+BIN_DIR = "/uoc/project/uoc40001/scratch/baes/EMOD3D/tools"
+INT32_MAX = 2147483647
 
 def load_config_hierarchy(rel_dir):
     """Load all config files in hierarchy."""
@@ -86,37 +86,24 @@ def get_dt(hf_params):
     return hf_params["dt"]
 
 
-def get_seed(sim_params, hf_params):
-    """Get seed value, calculating event-specific seed if needed. REQUIRED - no fallback."""
-    # Check for explicit seed in sim_params (realisation-specific)
-    if "hf" in sim_params and "seed" in sim_params["hf"]:
-        return sim_params["hf"]["seed"]
 
-    # Check for seed in root params
-    if "seed" not in hf_params:
-        raise ValueError(
-            "seed not found in hf config. Expected:\n"
-            "  - root_params['hf']['seed']"
-        )
-
-    seed = hf_params["seed"]
-
-    if seed == 0:
-        # seed=0 means use event-specific seed
-        # Generate from event name/srf path
-        import hashlib
-
-        srf_file = sim_params.get("srf_file", "")
-        # Use hash of srf filename to generate reproducible seed
-        seed_str = os.path.basename(srf_file)
-        seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        print(
-            f"# Generated event-specific seed: {seed_hash} (from {seed_str})",
-            file=sys.stderr,
-        )
-        return seed_hash
-
+def _validate_seed(seed, *, source):
+    seed = int(seed)
+    if seed < 0:
+        raise ValueError(f"{source} must be >= 0, got {seed}")
+    if seed > INT32_MAX:
+        raise ValueError(f"{source} too large for int32: {seed} (max {INT32_MAX})")
     return seed
+
+def get_seed(sim_params, hf_params):
+    # pass-through semantics only
+    if "hf" in sim_params and "seed" in sim_params["hf"]:
+        return _validate_seed(sim_params["hf"]["seed"], source="sim_params.hf.seed")
+
+    if "seed" not in hf_params:
+        raise ValueError("Missing root_params.hf.seed")
+
+    return _validate_seed(hf_params["seed"], source="root_params.hf.seed")
 
 
 def get_sim_bin(hf_params, bin_dir=None):
@@ -137,12 +124,7 @@ def get_sim_bin(hf_params, bin_dir=None):
     version = hf_params["version"]
 
     # Map version to binary name
-    if version.startswith("6.0.3"):
-        binary = f"{bin_dir}/hb_high_binmod_v{version}"
-    elif version.startswith("5.4"):
-        binary = f"{bin_dir}/hb_high_v{version}"
-    else:
-        binary = f"{bin_dir}/hb_high_binmod_v{version}"
+    binary = f"{bin_dir}/hb_high_binmod_v{version}"
 
     # Check if binary exists
     if Path(binary).exists():

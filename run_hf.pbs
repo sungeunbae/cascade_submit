@@ -39,7 +39,7 @@ echo "PBS_JOBID: ${PBS_JOBID:-N/A}"
 echo "PBS_ARRAY_INDEX: ${PBS_ARRAY_INDEX:-N/A}"
 
 GMSIM_ENV="${GMSIM_ENV:-/home/baes/py313}"
-HF_BIN_DIR="${HF_BIN_DIR:-/uoc/project/uoc40001/scratch/baes/tools}"
+HF_BIN_DIR="${HF_BIN_DIR:-/uoc/project/uoc40001/scratch/baes/EMOD3D/tools}"
 SCRIPTS_DIR="${SCRIPTS_DIR:-/uoc/project/uoc40001/scratch/baes/scripts}"
 FIX_PATH_SCRIPT="${SCRIPTS_DIR}/fix_nesi_path.sh"
 HF_COMMAND_SCRIPT="${SCRIPTS_DIR}/run_hf_command.py"
@@ -61,6 +61,15 @@ else
     exit 1
 fi
 source "$ACTIVATE_SCRIPT"
+
+
+echo "Loading Intel oneAPI MPI..."
+spack load intel-oneapi-mpi
+spack load intel-oneapi-mpi || true
+
+# Optional: show that libmpi is now visible
+python -c "import mpi4py; from mpi4py import MPI; print('mpi4py ok, rank', MPI.COMM_WORLD.Get_rank())"
+
 
 FAULT_DIR=$(dirname "$REL_DIR")
 if [[ -x "$FIX_PATH_SCRIPT" ]]; then
