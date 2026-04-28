@@ -1,0 +1,123 @@
+#!/bin/bash
+#PBS -j oe
+#PBS -l select=1:ncpus=1:mem=256GB
+#PBS -l walltime=04:00:00
+#PBS -N srf2stoch
+
+# Enable full debugging (remove this line once the job works)
+set -x
+
+set +u
+
+# ========================================================
+# CONFIGURATION (override with qsub -v SRF_FILE=... OUT_DIR=...)
+# ========================================================
+SRF_FILE="${SRF_FILE:-/uoc/project/uoc40001/scratch/baes/Cybershake/v26p4/Data/Sources/FiordSZ09/FiordSZ09_REL27.srf}"
+OUT_DIR="${OUT_DIR:-$(dirname "$SRF_FILE")}"
+STOCH_FILE="${STOCH_FILE:-${OUT_DIR}/$(basename "${SRF_FILE%.srf}.stoch")}"
+
+TARGET_DX=2.0
+TARGET_DY=2.0
+
+# Always use Python wrapper on Cascade
+PYTHON_VENV="/home/baes/py313"
+WRAPPER="/uoc/project/uoc40001/scratch/baes/cascade_submit/srf_to_stoch.py"
+
+# ========================================================
+# LOGGING SETUP
+# ========================================================
+JOB_ID_RAW=${PBS_JOBID%%.*}
+CLEAN_ID=$(echo "$JOB_ID_RAW" | sed 's/\[/_/g; s/\]//g')
+JOBNAME=${JOBNAME:-$(basename "$0" .pbs)}
+LOG_FILE="${OUT_DIR}/${JOBNAME}.${CLEAN_ID}.log"
+
+echo "Redirecting output to live log: $LOG_FILE"
+exec > "${LOG_FILE}" 2>&1
+
+# ========================================================
+# HEADER
+# ========================================================
+echo "═══════════════════════════════════════════════════════════"
+echo "srf2stoch Job for Multi-Plane SRF (Cascade)"
+echo "  SRF File:     ${SRF_FILE}"
+echo "  Output Stoch: ${STOCH_FILE}"
+echo "  Wrapper:      ${WRAPPER}"
+echo "  target_dx/dy: ${TARGET_DX} / ${TARGET_DY}"
+echo "  Memory:       64GB (increase to 128GB/256GB if needed)"
+echo "  Debug mode:   set -x enabled"
+echo "═══════════════════════════════════════════════════════════"
+
+# ========================================================
+# ACTIVATE PYTHON ENVIRONMENT (with robust fallback)
+# ========================================================
+echo ""
+echo ">>> Activating Python environment: ${PYTHON_VENV}"
+
+if [[ -f "${PYTHON_VENV}/bin/activate" ]]; then
+    source "${PYTHON_VENV}/bin/activate"
+    echo "Python environment activated successfully."
+    python --version
+else
+    echo "ERROR: Python venv not found at ${PYTHON_VENV}"
+    echo "Please check the path or update PYTHON_VENV in this script."
+    exit 1
+fi
+
+# ========================================================
+# PRE-FLIGHT CHECKS
+# ========================================================
+echo ""
+echo ">>> Pre-flight checks..."
+
+if [[ ! -f "${WRAPPER}" ]]; then
+    echo "ERROR: Wrapper script not found!"
+    echo "  Expected: ${WRAPPER}"
+    echo "  Please copy srf_to_stoch.py to the correct location."
+    exit 1
+fi
+
+if [[ ! -f "${SRF_FILE}" ]]; then
+    echo "ERROR: SRF file not found!"
+    echo "  Expected: ${SRF_FILE}"
+    exit 1
+fi
+
+echo "All pre-flight checks passed."
+
+# ========================================================
+# RUN THE JOB
+# ========================================================
+START_TIMESTAMP=$(date +%s)
+
+echo ""
+echo ">>> Starting srf2stoch via Python wrapper..."
+python "${WRAPPER}" "${SRF_FILE}"
+
+EXIT_CODE=$?
+END_TIMESTAMP=$(date +%s)
+DURATION=$(( END_TIMESTAMP - START_TIMESTAMP ))
+
+echo ""
+echo ">>> Job finished with exit code: ${EXIT_CODE}"
+echo "    Duration: ${DURATION} seconds"
+
+if [[ ${EXIT_CODE} -ne 0 ]]; then
+    echo ""
+    echo "❌ FAILED"
+    echo "   The wrapper returned a non-zero exit code."
+    echo "   Common causes: segmentation fault (memory), missing dependencies, or invalid SRF."
+    echo "   Try increasing memory to 128GB or 256GB and resubmit."
+    exit ${EXIT_CODE}
+fi
+
+echo ""
+echo "✅ SUCCESS"
+echo "   Output file: ${STOCH_FILE}"
+if [[ -f "${STOCH_FILE}" ]]; then
+    ls -lh "${STOCH_FILE}"
+fi
+
+echo ""
+echo "=========================================="
+echo "Job completed successfully."
+echo "=========================================="
