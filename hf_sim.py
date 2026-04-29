@@ -2,9 +2,8 @@
 """
 Simulates high frequency seismograms for stations.
 """
-# Standalone version extracted from ucgmsim/slurm_gm_workflow
-# workflow/calculation/hf_sim.py
-# Modifications: removed workflow package dependency (platform_config, binary_version)
+# Standalone version extracted from ucgmsim/slurm_gm_workflow (workflow/calculation/hf_sim.py)
+# Modifications: removed workflow.automation.platform_config and qcore.binary_version dependencies
 from argparse import ArgumentParser
 import os
 import random
@@ -212,10 +211,7 @@ if __name__ == "__main__":
             comm.Abort(1)
 
         if args.sim_bin is None:
-            print(
-                "Error: --sim_bin must be provided (no automatic binary resolution available)",
-                flush=True,
-            )
+            print("Error: --sim_bin must be specified explicitly in standalone mode", flush=True)
             comm.Abort(1)
 
         logger.debug("=" * 50)

@@ -161,7 +161,10 @@ def build_hf_command(rel_dir, sim_params, fault_params, root_params, vm_params, 
     # Build base command (no srun on Cascade)
     scripts_dir = os.path.dirname(os.path.abspath(__file__))
     hf_sim_script = os.path.join(scripts_dir, "hf_sim.py")
-    command = f"python {hf_sim_script} {stat_file} {out_file}"
+    command = (
+        f"python {hf_sim_script} "
+        f"{stat_file} {out_file}"
+    )
 
     # Get REQUIRED parameters (will raise if not found)
     duration = get_duration(sim_params, hf_params, vm_params)
